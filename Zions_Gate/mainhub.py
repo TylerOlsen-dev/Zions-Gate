@@ -170,6 +170,63 @@ async def verify(interaction: discord.Interaction, member: discord.Member):
         cursor.close()
         conn.close()
 
+@bot.tree.command(name="verify_all", description="Verify all users in the server.")
+@discord.app_commands.checks.has_permissions(administrator=True)
+async def verify_all(interaction: discord.Interaction):
+    conn = db_connection()
+    cursor = conn.cursor()
+    try:
+        guild = interaction.guild
+        if not guild:
+            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            return
+
+        verified_role = discord.utils.find(lambda r: r.name.lower().strip() == 'verified', guild.roles)
+        verification_pending_role = discord.utils.find(lambda r: r.name.lower().strip() == 'verification pending', guild.roles)
+
+        if not verified_role:
+            await interaction.response.send_message("'Verified' role not found in the server.", ephemeral=True)
+            return
+
+        await interaction.response.send_message("Starting the verification process for all members...", ephemeral=True)
+
+        # Iterate over all members in the server
+        for member in guild.members:
+            try:
+                # Skip bots
+                if member.bot:
+                    continue
+
+                # Update verification status in the database
+                sql_update_status = "UPDATE users SET verify_status = %s WHERE discord_id = %s"
+                cursor.execute(sql_update_status, (1, member.id))
+                conn.commit()
+
+                # Assign 'verified' role
+                if verified_role not in member.roles:
+                    await member.add_roles(verified_role)
+                    print(f"Assigned 'verified' role to {member}.")
+
+                # Remove 'verification pending' role
+                if verification_pending_role and verification_pending_role in member.roles:
+                    await member.remove_roles(verification_pending_role)
+                    print(f"Removed 'verification pending' role from {member}.")
+
+            except Exception as e:
+                print(f"Error verifying member {member}: {e}")
+                continue
+
+        await interaction.followup.send("Verification process completed for all members.", ephemeral=True)
+
+    except Exception as e:
+        await interaction.followup.send("An error occurred during the verification process.", ephemeral=True)
+        print(f"Error during verify_all: {e}")
+        traceback.print_exc()
+    finally:
+        cursor.close()
+        conn.close()
+
+
 async def close_verification_chat_after_delay(channel, delay=60):
     print(f"close_verification_chat_after_delay: Waiting for {delay} seconds to close channel {channel.name} ({channel.id})")
     await asyncio.sleep(delay)
@@ -195,7 +252,6 @@ async def close_verification_chat_after_delay(channel, delay=60):
     except Exception as e:
         print(f"Error closing verification chat: {e}")
         traceback.print_exc()
-
 
 @tasks.loop(hours=1)
 async def synchronize_verified_users():
