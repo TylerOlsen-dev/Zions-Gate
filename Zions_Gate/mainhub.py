@@ -176,11 +176,6 @@ async def verify_all(interaction: discord.Interaction):
     conn = db_connection()
     cursor = conn.cursor()
     try:
-
-        sql_update_status = "UPDATE users SET verify_status = %s WHERE discord_id = %s"
-        cursor.execute(sql_update_status, (1, member.id))
-        conn.commit()
-        
         guild = interaction.guild
         if not guild:
             await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
@@ -202,10 +197,24 @@ async def verify_all(interaction: discord.Interaction):
                 if member.bot:
                     continue
 
-                # Update verification status in the database
-                sql_update_status = "UPDATE users SET verify_status = %s WHERE discord_id = %s"
-                cursor.execute(sql_update_status, (1, member.id))
-                conn.commit()
+                # Check if user exists in the database
+                sql_check_user = "SELECT COUNT(*) FROM users WHERE discord_id = %s"
+                cursor.execute(sql_check_user, (member.id,))
+                result = cursor.fetchone()
+                user_exists = result[0] > 0
+
+                if not user_exists:
+                    # Insert the user into the database
+                    sql_insert_user = "INSERT INTO users (discord_id, verify_status) VALUES (%s, %s)"
+                    cursor.execute(sql_insert_user, (member.id, 1))
+                    conn.commit()
+                    print(f"Inserted new user {member} into the database.")
+                else:
+                    # Update verification status
+                    sql_update_status = "UPDATE users SET verify_status = %s WHERE discord_id = %s"
+                    cursor.execute(sql_update_status, (1, member.id))
+                    conn.commit()
+                    print(f"Updated verify_status for user {member}.")
 
                 # Assign 'verified' role
                 if verified_role not in member.roles:
@@ -230,6 +239,7 @@ async def verify_all(interaction: discord.Interaction):
     finally:
         cursor.close()
         conn.close()
+
 
 
 async def close_verification_chat_after_delay(channel, delay=60):
