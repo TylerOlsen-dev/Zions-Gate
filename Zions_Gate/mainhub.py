@@ -176,6 +176,11 @@ async def verify_all(interaction: discord.Interaction):
     conn = db_connection()
     cursor = conn.cursor()
     try:
+
+        sql_update_status = "UPDATE users SET verify_status = %s WHERE discord_id = %s"
+        cursor.execute(sql_update_status, (1, member.id))
+        conn.commit()
+        
         guild = interaction.guild
         if not guild:
             await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
