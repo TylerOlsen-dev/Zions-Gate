@@ -11,5 +11,4 @@ def db_connection():
         passwd=os.getenv("db_passwd"),
         database='discord_verification'
     )
-    print('Database Connection Successful!')
     return dbc
