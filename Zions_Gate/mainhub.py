@@ -1,6 +1,6 @@
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timezone
 import traceback
 import requests
 import discord
@@ -84,20 +84,16 @@ async def on_member_join(member):
     cursor = conn.cursor()
 
     try:
-        sql_insert_user = """
-        INSERT INTO users (discord_id, join_date, verify_status)
-        VALUES (%s, %s, %s)
-        ON DUPLICATE KEY UPDATE join_date = VALUES(join_date)
-        """
-        cursor.execute(sql_insert_user, (user_id, datetime.utcnow(), 0))
-        conn.commit()
 
-        verification_pending_role = discord.utils.find(lambda r: r.name.lower().strip() == 'verification pending', guild.roles)
-        if verification_pending_role:
-            await member.add_roles(verification_pending_role)
-            print(f"Assigned 'verification pending' role to {member} in the hub server.")
-        else:
-            print("'verification pending' role not found in the hub server.")
+        username = member.name
+
+        sql_insert_user = """
+        INSERT INTO users (discord_id, time_created, verify_status, username)
+        VALUES (%s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE time_created = VALUES(time_created)
+        """
+        cursor.execute(sql_insert_user, (user_id, datetime.now(timezone.utc), 0, 'DefaultUsername' ))
+        conn.commit()
 
     except Exception as e:
         print(f"Error during member join handling in hub server: {e}")
