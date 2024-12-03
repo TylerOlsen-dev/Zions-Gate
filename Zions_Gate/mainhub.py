@@ -73,34 +73,62 @@ async def on_ready():
         print(f'Failed to connect to database: {e}')
 
 @bot.event
-async def on_member_join(member):
-    user_id = member.id
-    guild = member.guild 
+async def on_ready():
+    print(f'Logged in as {bot.user} (ID: {bot.user.id})')
+    print('------')
+    try:
+        synced = await bot.tree.sync()
+        print(f'Synced {len(synced)} commands globally.')
+    except Exception as e:
+        print(f'Error syncing commands: {e}')
 
-    if hub_guild_id and guild.id != hub_guild_id:
-        return
+    # Recreate buttons on startup
+    await recreate_buttons_on_startup(bot)
+    await recreate_ticket_buttons(bot)
 
-    conn = db_connection()
-    cursor = conn.cursor()
+    # Start background tasks if they are not already running
+    if not synchronize_verified_users.is_running():
+        synchronize_verified_users.start()
+
+    if not check_global_bans.is_running():
+        check_global_bans.start()
 
     try:
+        conn = db_connection()
+        cursor = conn.cursor()
 
-        username = member.name
+        # Check all members in the hub guild
+        hub_guild = bot.get_guild(hub_guild_id)
+        if not hub_guild:
+            print("Hub guild not found.")
+        else:
+            print(f"Checking members in {hub_guild.name} (ID: {hub_guild.id})...")
+            for member in hub_guild.members:
+                # Skip bots
+                if member.bot:
+                    continue
 
-        sql_insert_user = """
-        INSERT INTO users (discord_id, time_created, verify_status, username)
-        VALUES (%s, %s, %s, %s)
-        ON DUPLICATE KEY UPDATE time_created = VALUES(time_created)
-        """
-        cursor.execute(sql_insert_user, (user_id, datetime.now(timezone.utc), 0, username))
-        conn.commit()
+                # Check if user exists in the database
+                sql_check_user = "SELECT COUNT(*) FROM users WHERE discord_id = %s"
+                cursor.execute(sql_check_user, (member.id,))
+                result = cursor.fetchone()
+                user_exists = result[0] > 0
 
-    except Exception as e:
-        print(f"Error during member join handling in hub server: {e}")
-        traceback.print_exc()
-    finally:
-        cursor.close()
+                if not user_exists:
+                    # Insert the user into the database
+                    sql_insert_user = """
+                    INSERT INTO users (discord_id, time_created, verify_status, username)
+                    VALUES (%s, %s, %s, %s)
+                    """
+                    cursor.execute(sql_insert_user, (member.id, datetime.now(timezone.utc), 0, member.name))
+                    conn.commit()
+                    print(f"Added {member.name} (ID: {member.id}) to the database.")
+
         conn.close()
+    except Exception as e:
+        print(f'Failed to connect to database or process members: {e}')
+        traceback.print_exc()
+
 
 @bot.tree.command(name="verify", description="Verify a user.")
 @discord.app_commands.checks.has_permissions(administrator=True)
