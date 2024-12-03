@@ -92,7 +92,7 @@ async def on_member_join(member):
         VALUES (%s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE time_created = VALUES(time_created)
         """
-        cursor.execute(sql_insert_user, (user_id, datetime.now(timezone.utc), 0, 'DefaultUsername' ))
+        cursor.execute(sql_insert_user, (user_id, datetime.now(timezone.utc), 0, username))
         conn.commit()
 
     except Exception as e:
@@ -242,7 +242,7 @@ async def close_verification_chat_after_delay(channel, delay=60):
     print(f"close_verification_chat_after_delay: Waiting for {delay} seconds to close channel {channel.name} ({channel.id})")
     await asyncio.sleep(delay)
     try:
-        if 1303165889344049183 is None:
+        if 1303165889344049183 == None:
             print("TARGET_CATEGORY_ID is not set. Skipping channel deletion.")
             return
 
