@@ -8,22 +8,82 @@ import asyncio
 import csv
 import os
 
+
+
+
+
+
+
+
+
+
+# Load environment variables
 load_dotenv()
 
+
+
+
+
+
+
+
+
+
+# Import custom modules for database and button handling
 from db_connection import db_connection
 from role_button import send_role_button, remove_button, recreate_buttons_on_startup
 from ticket_button import send_ticket_button, delete_ticket_button, recreate_ticket_buttons
 
+
+
+
+
+
+
+
+
+
+# Initialize Discord bot intents
 intents = discord.Intents.default()
 intents.members = True
 intents.guilds = True
 intents.messages = True
 intents.message_content = True
 
+
+
+
+
+
+
+
+
+
+# Create bot instance
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+
+
+
+
+
+
+
+
+
+# Webhook URL for logging actions
 WEBHOOK_URL = os.getenv("logs_webhook_url")
 
+
+
+
+
+
+
+
+
+
+# Function to log actions to a webhook
 async def log_action(guild, message):
     if not WEBHOOK_URL:
         print("Error: 'logs_webhook_url' is not set. Cannot send log messages.")
@@ -47,6 +107,16 @@ else:
         print(f"Error: 'hub_guild_id' is invalid: {hub_guild_id_str}")
         hub_guild_id = None
 
+
+
+
+
+
+
+
+
+
+# Initialize the hub guild ID from environment variables
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user} (ID: {bot.user.id})')
@@ -72,6 +142,16 @@ async def on_ready():
     except Exception as e:
         print(f'Failed to connect to database: {e}')
 
+
+
+
+
+
+
+
+
+
+# Event triggered when the bot is ready
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user} (ID: {bot.user.id})')
@@ -130,6 +210,15 @@ async def on_ready():
         traceback.print_exc()
 
 
+
+
+
+
+
+
+
+
+# Slash command to verify a user
 @bot.tree.command(name="verify", description="Verify a user.")
 @discord.app_commands.checks.has_permissions(administrator=True)
 async def verify(interaction: discord.Interaction, member: discord.Member):
@@ -194,6 +283,16 @@ async def verify(interaction: discord.Interaction, member: discord.Member):
         cursor.close()
         conn.close()
 
+
+
+
+
+
+
+
+
+
+# Slash command to verify all users in the server
 @bot.tree.command(name="verify_all", description="Verify all users in the server.")
 @discord.app_commands.checks.has_permissions(administrator=True)
 async def verify_all(interaction: discord.Interaction):
@@ -266,6 +365,14 @@ async def verify_all(interaction: discord.Interaction):
 
 
 
+
+
+
+
+
+
+
+# Function to close verification chat after a delay
 async def close_verification_chat_after_delay(channel, delay=60):
     print(f"close_verification_chat_after_delay: Waiting for {delay} seconds to close channel {channel.name} ({channel.id})")
     await asyncio.sleep(delay)
@@ -292,6 +399,16 @@ async def close_verification_chat_after_delay(channel, delay=60):
         print(f"Error closing verification chat: {e}")
         traceback.print_exc()
 
+
+
+
+
+
+
+
+
+
+# Background task to synchronize verified users
 @tasks.loop(hours=1)
 async def synchronize_verified_users():
     await bot.wait_until_ready()
@@ -332,6 +449,16 @@ async def synchronize_verified_users():
         cursor.close()
         conn.close()
 
+
+
+
+
+
+
+
+
+
+# Slash command to send a role button to a channel
 @bot.tree.command(name="send_role_button", description="Send a role button to a specific channel.")
 @discord.app_commands.checks.has_permissions(administrator=True)
 async def slash_send_role_button(
@@ -345,21 +472,61 @@ async def slash_send_role_button(
 ):
     await send_role_button(interaction, channel, role, message, button_text, success_message, allowed_roles)
 
+
+
+
+
+
+
+
+
+
+# Slash command to remove a button by message ID
 @bot.tree.command(name="remove_button", description="Remove a button by its message ID.")
 @discord.app_commands.checks.has_permissions(administrator=True)
 async def slash_remove_button(interaction: discord.Interaction, message_id: str):
     await remove_button(interaction, message_id)
 
+
+
+
+
+
+
+
+
+
+# Slash command to send a ticket button to a channel
 @bot.tree.command(name="send_ticket_button", description="Send a button to open a ticket.")
 @discord.app_commands.checks.has_permissions(administrator=True)
 async def slash_send_ticket_button(interaction: discord.Interaction, channel: discord.TextChannel):
     await send_ticket_button(interaction, channel)
 
+
+
+
+
+
+
+
+
+
+# Slash command to delete a ticket button
 @bot.tree.command(name="delete_ticket_button", description="Delete a ticket button from the channel and database.")
 @discord.app_commands.checks.has_permissions(administrator=True)
 async def slash_delete_ticket_button(interaction: discord.Interaction, message_id: str):
     await delete_ticket_button(interaction, message_id)
 
+
+
+
+
+
+
+
+
+
+# Slash command to purge messages and log them
 @bot.tree.command(name="purge", description="Delete messages and log them.")
 @discord.app_commands.checks.has_permissions(manage_messages=True)
 async def purge(interaction: discord.Interaction, channel: discord.TextChannel, limit: int):
@@ -402,6 +569,16 @@ async def purge(interaction: discord.Interaction, channel: discord.TextChannel, 
 
     os.remove(log_filename)
 
+
+
+
+
+
+
+
+
+
+# Slash command to wipe all commands from a guild and re-sync
 @bot.tree.command(name="wipe_commands", description="Wipe all commands from a guild and re-sync.")
 @discord.app_commands.checks.has_permissions(administrator=True)
 async def wipe_commands(interaction: discord.Interaction, guild_id: str):
@@ -422,6 +599,16 @@ async def wipe_commands(interaction: discord.Interaction, guild_id: str):
         print(f"Error wiping commands: {e}")
         traceback.print_exc()
 
+
+
+
+
+
+
+
+
+
+# Background task to check and enforce global bans
 @tasks.loop(hours=1)
 async def check_global_bans():
     conn = db_connection()
@@ -455,5 +642,14 @@ async def check_global_bans():
         conn.close()
     await asyncio.sleep(1)
 
-# Run the bot
+
+
+
+
+
+
+
+
+    
+# Run the bot using the token from the environment variables
 bot.run(os.getenv("hub_bot_token"))
