@@ -7,20 +7,80 @@ import discord
 import asyncio
 import os
 
+
+
+
+
+
+
+
+
+
+# Load environment variables
 load_dotenv()
 
-from db_connection import db_connection
 
+
+
+
+
+
+
+
+
+# Import database connection
+from db_connection import db_connection\
+
+
+
+
+
+
+
+
+
+
+# Initialize Discord bot intents
 intents = discord.Intents.default()
 intents.members = True
 intents.guilds = True
 intents.messages = True
 intents.message_content = True
 
+
+
+
+
+
+
+
+
+
+# Create the bot instance
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+
+
+
+
+
+
+
+
+
+# Set the webhook URL for logging
 WEBHOOK_URL = os.getenv("logs_webhook_url")
 
+
+
+
+
+
+
+
+
+
+# Function to send log messages to a webhook
 async def log_action(guild, message):
     if not WEBHOOK_URL:
         print("Error: 'logs_webhook_url' is not set. Cannot send log messages.")
@@ -33,6 +93,16 @@ async def log_action(guild, message):
     if response.status_code != 204:
         print(f"Failed to send log message: {response.status_code} {response.content}")
 
+
+
+
+
+
+
+
+
+
+# Initialize the hub server ID from environment variables
 hub_guild_id_str = os.getenv("hub_guild_id")
 if not hub_guild_id_str:
     print("Error: 'hub_guild_id' is not set in environment variables.")
@@ -44,6 +114,16 @@ else:
         print(f"Error: 'hub_guild_id' is invalid: {hub_guild_id_str}")
         hub_guild_id = None
 
+
+
+
+
+
+
+
+
+
+# Event triggered when the bot is ready
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user} (ID: {bot.user.id})')
@@ -64,6 +144,15 @@ async def on_ready():
         print(f'Failed to connect to database: {e}')
 
 
+
+
+
+
+
+
+
+
+# Event triggered when a new member joins a server
 @bot.event
 async def on_member_join(member):
     user_id = member.id
@@ -121,6 +210,15 @@ async def on_member_join(member):
         conn.close()
 
 
+
+
+
+
+
+
+
+
+# Perform actions in the hub server (e.g., remove roles, ban users)
 async def perform_hub_server_actions(user_id, remove_verified_role=False, remove_verification_pending_role=False, ban_user=False, reason=None):
 
     if not hub_guild_id:
@@ -171,6 +269,16 @@ async def perform_hub_server_actions(user_id, remove_verified_role=False, remove
         print(f"Error performing actions in hub server for user {user_id}: {e}")
         traceback.print_exc()
 
+
+
+
+
+
+
+
+
+
+# Slash command to globally ban a user from all servers
 @bot.tree.command(name="global_ban", description="Globally ban a user from all servers.")
 @discord.app_commands.checks.has_permissions(administrator=True)
 async def global_ban(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
@@ -251,6 +359,15 @@ async def global_ban(interaction: discord.Interaction, member: discord.Member, r
         conn.close()
 
 
+
+
+
+
+
+
+
+
+# Slash command to globally unban a user from all servers
 @bot.tree.command(name="global_unban", description="Globally unban a user from all servers.")
 @discord.app_commands.checks.has_permissions(administrator=True)
 async def global_unban(interaction: discord.Interaction, user_id: str, reason: str = "No reason provided"):
@@ -306,6 +423,16 @@ async def global_unban(interaction: discord.Interaction, user_id: str, reason: s
         cursor.close()
         conn.close()
 
+
+
+
+
+
+
+
+
+
+# Slash command to globally kick a user from all servers
 @bot.tree.command(name="global_kick", description="Globally kick a user from all servers.")
 @discord.app_commands.checks.has_permissions(administrator=True)
 async def global_kick(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
@@ -382,6 +509,15 @@ async def global_kick(interaction: discord.Interaction, member: discord.Member, 
         conn.close()
 
 
+
+
+
+
+
+
+
+
+# Slash command to locally kick a user from the current server
 @bot.tree.command(name="local_kick", description="Kick a user from this server.")
 @discord.app_commands.checks.has_permissions(kick_members=True)
 async def local_kick(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
@@ -398,6 +534,16 @@ async def local_kick(interaction: discord.Interaction, member: discord.Member, r
         print(f"Error during kick: {e}")
         traceback.print_exc()
 
+
+
+
+
+
+
+
+
+
+# Slash command to locally ban a user from the current server
 @bot.tree.command(name="local_ban", description="Ban a user from this server.")
 @discord.app_commands.checks.has_permissions(ban_members=True)
 async def local_ban(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
@@ -414,6 +560,16 @@ async def local_ban(interaction: discord.Interaction, member: discord.Member, re
         print(f"Error during ban: {e}")
         traceback.print_exc()
 
+
+
+
+
+
+
+
+
+
+# Slash command to wipe all commands from a guild and re-sync
 @bot.tree.command(name="wipe_commands", description="Wipe all commands from a guild and re-sync.")
 @discord.app_commands.checks.has_permissions(administrator=True)
 async def wipe_commands(interaction: discord.Interaction, guild_id: str):
@@ -434,6 +590,16 @@ async def wipe_commands(interaction: discord.Interaction, guild_id: str):
         print(f"Error wiping commands: {e}")
         traceback.print_exc()
 
+
+
+
+
+
+
+
+
+
+# Periodic task to check for globally banned users and enforce bans
 @tasks.loop(hours=1)
 async def check_global_bans():
     for guild in bot.guilds:
@@ -462,4 +628,14 @@ async def check_global_bans():
             conn.close()
         await asyncio.sleep(1)
 
+
+
+
+
+
+
+
+
+        
+# Start the bot with the token from environment variables
 bot.run(os.getenv("connected_bot_token"))
