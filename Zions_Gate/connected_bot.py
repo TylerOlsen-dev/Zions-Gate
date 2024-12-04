@@ -1,10 +1,12 @@
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 from datetime import datetime
+from datetime import datetime, timezone
 import traceback
 import requests
 import discord
 import asyncio
+import csv
 import os
 
 
@@ -152,6 +154,7 @@ async def on_ready():
 
 
 
+
 # Event triggered when a new member joins a server
 @bot.event
 async def on_member_join(member):
@@ -204,6 +207,70 @@ async def on_member_join(member):
             await log_action(guild, f"Unverified user {member} attempted to join and was kicked.")
     except Exception as e:
         print(f"Error during member join handling: {e}")
+        traceback.print_exc()
+    finally:
+        cursor.close()
+        conn.close()
+
+
+
+
+
+
+
+
+
+# Add all users to the database
+@bot.command(name="add_all_to_database", help="Adds all members of the server to the database. Skips existing members.")
+@commands.has_permissions(administrator=True)
+async def add_all_to_database(ctx):
+    guild = ctx.guild
+    if not guild:
+        await ctx.send("This command can only be used in a server.")
+        return
+
+    conn = db_connection()
+    cursor = conn.cursor()
+
+    try:
+        await ctx.send("Starting to add all members to the database. This may take a while...")
+
+        added_members = 0
+        skipped_members = 0
+
+        for member in guild.members:
+            # Skip bots
+            if member.bot:
+                continue
+
+            # Check if user already exists in the database
+            sql_check_user = "SELECT COUNT(*) FROM users WHERE discord_id = %s"
+            cursor.execute(sql_check_user, (member.id,))
+            result = cursor.fetchone()
+            user_exists = result[0] > 0
+
+            if not user_exists:
+                # Add user to the database
+                sql_insert_user = """
+                INSERT INTO users (discord_id, time_created, verify_status, username)
+                VALUES (%s, %s, %s, %s)
+                """
+                cursor.execute(sql_insert_user, (member.id, datetime.now(timezone.utc), 0, member.name))
+                conn.commit()
+                added_members += 1
+                print(f"Added {member.name} (ID: {member.id}) to the database.")
+            else:
+                skipped_members += 1
+
+        await ctx.send(
+            f"Finished adding members to the database.\n"
+            f"Added: {added_members}\n"
+            f"Skipped (already in database): {skipped_members}"
+        )
+
+    except Exception as e:
+        await ctx.send("An error occurred while adding members to the database.")
+        print(f"Error in add_all_to_database: {e}")
         traceback.print_exc()
     finally:
         cursor.close()
@@ -569,6 +636,137 @@ async def local_ban(interaction: discord.Interaction, member: discord.Member, re
 
 
 
+# Slash command to verify all users in the server
+@bot.tree.command(name="verify_all", description="Verify all users in the server.")
+@discord.app_commands.checks.has_permissions(administrator=True)
+async def verify_all(interaction: discord.Interaction):
+    conn = db_connection()
+    cursor = conn.cursor()
+    try:
+        guild = interaction.guild
+        if not guild:
+            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            return
+
+        verified_role = discord.utils.find(lambda r: r.name.lower().strip() == 'verified', guild.roles)
+        verification_pending_role = discord.utils.find(lambda r: r.name.lower().strip() == 'verification pending', guild.roles)
+
+        if not verified_role:
+            await interaction.response.send_message("'Verified' role not found in the server.", ephemeral=True)
+            return
+
+        await interaction.response.send_message("Starting the verification process for all members...", ephemeral=True)
+
+        # Iterate over all members in the server
+        for member in guild.members:
+            try:
+                # Skip bots
+                if member.bot:
+                    continue
+
+                # Check if user exists in the database
+                sql_check_user = "SELECT COUNT(*) FROM users WHERE discord_id = %s"
+                cursor.execute(sql_check_user, (member.id,))
+                result = cursor.fetchone()
+                user_exists = result[0] > 0
+
+                if not user_exists:
+                    # Insert the user into the database
+                    sql_insert_user = "INSERT INTO users (discord_id, verify_status) VALUES (%s, %s)"
+                    cursor.execute(sql_insert_user, (member.id, 1))
+                    conn.commit()
+                    print(f"Inserted new user {member} into the database.")
+                else:
+                    # Update verification status
+                    sql_update_status = "UPDATE users SET verify_status = %s WHERE discord_id = %s"
+                    cursor.execute(sql_update_status, (1, member.id))
+                    conn.commit()
+                    print(f"Updated verify_status for user {member}.")
+
+                # Assign 'verified' role
+                if verified_role not in member.roles:
+                    await member.add_roles(verified_role)
+                    print(f"Assigned 'verified' role to {member}.")
+
+                # Remove 'verification pending' role
+                if verification_pending_role and verification_pending_role in member.roles:
+                    await member.remove_roles(verification_pending_role)
+                    print(f"Removed 'verification pending' role from {member}.")
+
+            except Exception as e:
+                print(f"Error verifying member {member}: {e}")
+                continue
+
+        await interaction.followup.send("Verification process completed for all members.", ephemeral=True)
+
+    except Exception as e:
+        await interaction.followup.send("An error occurred during the verification process.", ephemeral=True)
+        print(f"Error during verify_all: {e}")
+        traceback.print_exc()
+    finally:
+        cursor.close()
+        conn.close()
+
+
+
+
+
+
+
+
+
+# Slash command to purge messages and log them
+@bot.tree.command(name="purge", description="Delete messages and log them.")
+@discord.app_commands.checks.has_permissions(manage_messages=True)
+async def purge(interaction: discord.Interaction, channel: discord.TextChannel, limit: int):
+    if limit <= 0 or limit > 1000:
+        await interaction.response.send_message("Please specify a limit between 1 and 1000.", ephemeral=True)
+        return
+
+    await interaction.response.send_message(f"Purging {limit} messages from {channel.mention}.", ephemeral=True)
+
+    deleted_messages = await channel.purge(limit=limit)
+
+    log_filename = f"purged_messages_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+
+    with open(log_filename, mode="w", encoding="utf-8", newline='') as csvfile:
+        csvwriter = csv.writer(csvfile)
+        csvwriter.writerow(["Timestamp", "Author", "Author ID", "Content"])
+        for message in deleted_messages:
+            csvwriter.writerow([
+                message.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                f"{message.author}",
+                message.author.id,
+                message.content.replace('\n', '\\n')
+            ])
+
+    admin_channel_id = os.getenv("admin_channel_id")
+    if admin_channel_id:
+        try:
+            admin_channel = interaction.guild.get_channel(int(admin_channel_id))
+            if admin_channel:
+                await admin_channel.send(
+                    content=f"Purged {len(deleted_messages)} messages from {channel.mention}. Log file attached:",
+                    file=discord.File(log_filename)
+                )
+            else:
+                print("Admin channel not found. Log file was not sent.")
+        except Exception as e:
+            print(f"Error sending log file: {e}")
+    else:
+        print("Admin channel ID not set. Log file was not sent.")
+
+    os.remove(log_filename)
+
+
+
+
+
+
+
+
+
+
 # Slash command to wipe all commands from a guild and re-sync
 @bot.tree.command(name="wipe_commands", description="Wipe all commands from a guild and re-sync.")
 @discord.app_commands.checks.has_permissions(administrator=True)
@@ -636,6 +834,6 @@ async def check_global_bans():
 
 
 
-        
+
 # Start the bot with the token from environment variables
 bot.run(os.getenv("connected_bot_token"))

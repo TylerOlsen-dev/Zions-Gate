@@ -5,7 +5,6 @@ import traceback
 import requests
 import discord
 import asyncio
-import csv
 import os
 
 
@@ -525,59 +524,7 @@ async def slash_delete_ticket_button(interaction: discord.Interaction, message_i
 
 
 
-
-# Slash command to purge messages and log them
-@bot.tree.command(name="purge", description="Delete messages and log them.")
-@discord.app_commands.checks.has_permissions(manage_messages=True)
-async def purge(interaction: discord.Interaction, channel: discord.TextChannel, limit: int):
-    if limit <= 0 or limit > 1000:
-        await interaction.response.send_message("Please specify a limit between 1 and 1000.", ephemeral=True)
-        return
-
-    await interaction.response.send_message(f"Purging {limit} messages from {channel.mention}.", ephemeral=True)
-
-    deleted_messages = await channel.purge(limit=limit)
-
-    log_filename = f"purged_messages_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-
-    with open(log_filename, mode="w", encoding="utf-8", newline='') as csvfile:
-        csvwriter = csv.writer(csvfile)
-        csvwriter.writerow(["Timestamp", "Author", "Author ID", "Content"])
-        for message in deleted_messages:
-            csvwriter.writerow([
-                message.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-                f"{message.author}",
-                message.author.id,
-                message.content.replace('\n', '\\n')
-            ])
-
-    admin_channel_id = os.getenv("admin_channel_id")
-    if admin_channel_id:
-        try:
-            admin_channel = interaction.guild.get_channel(int(admin_channel_id))
-            if admin_channel:
-                await admin_channel.send(
-                    content=f"Purged {len(deleted_messages)} messages from {channel.mention}. Log file attached:",
-                    file=discord.File(log_filename)
-                )
-            else:
-                print("Admin channel not found. Log file was not sent.")
-        except Exception as e:
-            print(f"Error sending log file: {e}")
-    else:
-        print("Admin channel ID not set. Log file was not sent.")
-
-    os.remove(log_filename)
-
-
-
-
-
-
-
-
-
-
+    
 # Slash command to wipe all commands from a guild and re-sync
 @bot.tree.command(name="wipe_commands", description="Wipe all commands from a guild and re-sync.")
 @discord.app_commands.checks.has_permissions(administrator=True)
@@ -650,6 +597,6 @@ async def check_global_bans():
 
 
 
-    
+
 # Run the bot using the token from the environment variables
 bot.run(os.getenv("hub_bot_token"))
