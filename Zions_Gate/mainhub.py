@@ -209,6 +209,57 @@ async def on_ready():
         traceback.print_exc()
 
 
+@bot.event
+async def on_member_join(member):
+    try:
+        guild = member.guild
+
+        # Ensure this is the hub guild
+        if guild.id != hub_guild_id:
+            print(f"Member {member} joined {guild.name}, but this is not the hub guild. Ignoring.")
+            return
+
+        print(f"New member joined: {member.name} (ID: {member.id})")
+
+        # Skip bots
+        if member.bot:
+            print(f"Skipping bot: {member.name}")
+            return
+
+        # Connect to the database
+        conn = db_connection()
+        cursor = conn.cursor()
+
+        # Check if the user already exists in the database
+        sql_check_user = "SELECT COUNT(*) FROM users WHERE discord_id = %s"
+        cursor.execute(sql_check_user, (member.id,))
+        result = cursor.fetchone()
+        user_exists = result[0] > 0
+
+        if not user_exists:
+            # Insert the user into the database
+            sql_insert_user = """
+            INSERT INTO users (discord_id, time_created, verify_status, username)
+            VALUES (%s, %s, %s, %s)
+            """
+            cursor.execute(sql_insert_user, (member.id, datetime.now(timezone.utc), 0, member.name))
+            conn.commit()
+            print(f"Added new member to the database: {member.name} (ID: {member.id})")
+        else:
+            print(f"Member {member.name} (ID: {member.id}) already exists in the database.")
+
+        cursor.close()
+        conn.close()
+
+        # Optionally send a welcome message
+        try:
+            await member.send(f"Welcome to {guild.name}, {member.name}! Please verify to access the server.")
+        except discord.Forbidden:
+            print(f"Unable to send DM to {member.name} (ID: {member.id}).")
+
+    except Exception as e:
+        print(f"Error in on_member_join for {member.name} (ID: {member.id}): {e}")
+        traceback.print_exc()
 
 
 
