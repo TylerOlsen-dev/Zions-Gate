@@ -120,42 +120,9 @@ else:
 async def on_ready():
     print(f'Logged in as {bot.user} (ID: {bot.user.id})')
     print('------')
-    try:
-        synced = await bot.tree.sync()
-        print(f'Synced {len(synced)} commands globally.')
-    except Exception as e:
-        print(f'Error syncing commands: {e}')
-
-    await recreate_buttons_on_startup(bot)
-    await recreate_ticket_buttons(bot)
-
-    if not synchronize_verified_users.is_running():
-        synchronize_verified_users.start()
-
-    if not check_global_bans.is_running():
-        check_global_bans.start()
 
     try:
-        conn = db_connection()
-        conn.close()
-    except Exception as e:
-        print(f'Failed to connect to database: {e}')
-
-
-
-
-
-
-
-
-
-
-# Event triggered when the bot is ready
-@bot.event
-async def on_ready():
-    print(f'Logged in as {bot.user} (ID: {bot.user.id})')
-    print('------')
-    try:
+        # Sync slash commands globally
         synced = await bot.tree.sync()
         print(f'Synced {len(synced)} commands globally.')
     except Exception as e:
@@ -172,6 +139,7 @@ async def on_ready():
     if not check_global_bans.is_running():
         check_global_bans.start()
 
+    # Perform additional checks and setup
     try:
         conn = db_connection()
         cursor = conn.cursor()
@@ -187,7 +155,7 @@ async def on_ready():
                 if member.bot:
                     continue
 
-                # Check if user exists in the database
+                # Check if the user exists in the database
                 sql_check_user = "SELECT COUNT(*) FROM users WHERE discord_id = %s"
                 cursor.execute(sql_check_user, (member.id,))
                 result = cursor.fetchone()
@@ -207,6 +175,14 @@ async def on_ready():
     except Exception as e:
         print(f'Failed to connect to database or process members: {e}')
         traceback.print_exc()
+
+
+
+
+
+
+
+
 
 
 @bot.event
