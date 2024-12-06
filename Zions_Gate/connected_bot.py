@@ -125,25 +125,64 @@ else:
 
 
 
-# Event triggered when the bot is ready
+# Load environment variable for the startup ban check toggle
+CHECK_BANS_ON_STARTUP = os.getenv("check_bans_on_startup", "true").lower() == "true"
+
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user} (ID: {bot.user.id})')
     print('------')
+
     try:
+        # Sync slash commands globally
         synced = await bot.tree.sync()
         print(f'Synced {len(synced)} commands globally.')
     except Exception as e:
         print(f'Error syncing commands: {e}')
 
-    if not check_global_bans.is_running():
-        check_global_bans.start()
+    # Perform global ban check on startup if enabled
+    if CHECK_BANS_ON_STARTUP:
+        total_banned = 0  # Counter for banned users
+        try:
+            print("Performing global ban check on startup...")
+            conn = db_connection()
+            cursor = conn.cursor()
+            try:
+                # Fetch all globally banned users
+                sql_get_bans = "SELECT discord_id FROM global_bans"
+                cursor.execute(sql_get_bans)
+                banned_ids = [row[0] for row in cursor.fetchall()]
+
+                for guild in bot.guilds:
+                    for member in guild.members:
+                        if member.id in banned_ids:
+                            if guild.me.guild_permissions.ban_members:
+                                try:
+                                    await guild.ban(member, reason="Globally banned.")
+                                    print(f"Banned globally banned user {member} in {guild.name}.")
+                                    await log_action(guild, f"Banned globally banned user {member}.")
+                                    total_banned += 1
+                                except Exception as e:
+                                    print(f"Error banning {member} in {guild.name}: {e}")
+                            else:
+                                print(f"Bot lacks 'Ban Members' permission in {guild.name}.")
+            finally:
+                cursor.close()
+                conn.close()
+        except Exception as e:
+            print(f"Error during global ban check on startup: {e}")
+            traceback.print_exc()
+
+        print(f"Global ban check complete. Total users banned: {total_banned}.")
+    else:
+        print("Global ban check on startup is disabled.")
 
     try:
         conn = db_connection()
         conn.close()
     except Exception as e:
         print(f'Failed to connect to database: {e}')
+
 
 
 
@@ -787,53 +826,6 @@ async def wipe_commands(interaction: discord.Interaction, guild_id: str):
         await interaction.followup.send("An error occurred while wiping commands.", ephemeral=True)
         print(f"Error wiping commands: {e}")
         traceback.print_exc()
-
-
-
-
-
-
-
-
-
-
-# Periodic task to check for globally banned users and enforce bans
-@tasks.loop(hours=1)
-async def check_global_bans():
-    for guild in bot.guilds:
-        conn = db_connection()
-        cursor = conn.cursor()
-        try:
-            sql_get_bans = "SELECT discord_id FROM global_bans"
-            cursor.execute(sql_get_bans)
-            banned_ids = [row[0] for row in cursor.fetchall()]
-
-            for member in guild.members:
-                if member.id in banned_ids:
-                    if not guild.me.guild_permissions.ban_members:
-                        print(f"Bot lacks 'Ban Members' permission in {guild.name}.")
-                        continue
-                    try:
-                        await member.ban(reason="Globally banned.")
-                        await log_action(guild, f"Globally banned user {member} was banned.")
-                    except Exception as e:
-                        print(f"Error banning {member}: {e}")
-        except Exception as e:
-            print(f"Error during global bans check: {e}")
-            traceback.print_exc()
-        finally:
-            cursor.close()
-            conn.close()
-        await asyncio.sleep(1)
-
-
-
-
-
-
-
-
-
 
 # Start the bot with the token from environment variables
 bot.run(os.getenv("connected_bot_token"))

@@ -136,9 +136,6 @@ async def on_ready():
     if not synchronize_verified_users.is_running():
         synchronize_verified_users.start()
 
-    if not check_global_bans.is_running():
-        check_global_bans.start()
-
     # Perform additional checks and setup
     try:
         conn = db_connection()
@@ -572,57 +569,6 @@ async def wipe_commands(interaction: discord.Interaction, guild_id: str):
         await interaction.followup.send("An error occurred while wiping commands.", ephemeral=True)
         print(f"Error wiping commands: {e}")
         traceback.print_exc()
-
-
-
-
-
-
-
-
-
-
-# Background task to check and enforce global bans
-@tasks.loop(hours=1)
-async def check_global_bans():
-    conn = db_connection()
-    cursor = conn.cursor()
-    try:
-        sql_get_bans = "SELECT discord_id FROM global_bans"
-        cursor.execute(sql_get_bans)
-        banned_ids = [row[0] for row in cursor.fetchall()]
-
-        hub_guild = bot.get_guild(hub_guild_id)
-        if not hub_guild:
-            print("Hub server not found.")
-            return
-
-        for member_id in banned_ids:
-            member = hub_guild.get_member(member_id)
-            if member:
-                if hub_guild.me.guild_permissions.ban_members:
-                    try:
-                        await hub_guild.ban(member, reason="Globally banned.")
-                        await log_action(hub_guild, f"Globally banned user {member} was banned from the hub server.")
-                    except Exception as e:
-                        print(f"Error banning {member}: {e}")
-                else:
-                    print(f"Bot lacks 'Ban Members' permission in the hub server.")
-    except Exception as e:
-        print(f"Error during global bans check: {e}")
-        traceback.print_exc()
-    finally:
-        cursor.close()
-        conn.close()
-    await asyncio.sleep(1)
-
-
-
-
-
-
-
-
 
 
 # Run the bot using the token from the environment variables
