@@ -453,8 +453,8 @@ async def global_ban(interaction: discord.Interaction, member: discord.Member, r
         )
 
         
-        await log_action(interaction.guild, f"{member} has been globally banned by {interaction.user} in {interaction.guild.name}. Reason: {reason}")
-
+        await log_action(interaction.guild,  f"{member.mention} ({member.id}) has been globally banned by {interaction.user} in {interaction.guild.name}. Reason: {reason}")
+        
         await interaction.followup.send(f"{member} has been globally banned from all servers.", ephemeral=True)
     except Exception as e:
         await interaction.followup.send("An error occurred while trying to globally ban the user.", ephemeral=True)
@@ -518,7 +518,7 @@ async def global_unban(interaction: discord.Interaction, user_id: str, reason: s
             else:
                 print(f"Bot lacks 'Ban Members' permission in {guild.name}.")
 
-        await log_action(interaction.guild, f"{user} has been globally unbanned by {interaction.user} in {interaction.guild.name}. Reason: {reason}")
+        await log_action(interaction.guild,  f"{user.mention} ({user.id}) has been globally unbanned by {interaction.user} in {interaction.guild.name}. Reason: {reason}")
 
         await interaction.followup.send(f"User {user} has been globally unbanned from all servers.", ephemeral=True)
     except Exception as e:
@@ -603,7 +603,7 @@ async def global_kick(interaction: discord.Interaction, member: discord.Member, 
         )
 
         
-        await log_action(interaction.guild, f"{member} has been globally kicked by {interaction.user} in {interaction.guild.name}. Reason: {reason}")
+        await log_action(interaction.guild, f"{member.mention} ({member.id}) has been globally kicked by {interaction.user} in {interaction.guild.name}. Reason: {reason}")
 
         await interaction.followup.send(f"{member} has been globally kicked from all servers (except the hub server).", ephemeral=True)
     except Exception as e:
@@ -631,7 +631,7 @@ async def local_kick(interaction: discord.Interaction, member: discord.Member, r
     try:
         if interaction.guild.me.guild_permissions.kick_members:
             await member.kick(reason=f"Kick by {interaction.user}: {reason}")
-            await log_action(interaction.guild, f"{member} has been locally kicked by {interaction.user} in {interaction.guild.name}. Reason: {reason}")
+            await log_action(interaction.guild, f"{member.mention} ({member.id}) has been locally kicked by {interaction.user} in {interaction.guild.name}. Reason: {reason}")
             await interaction.followup.send(f"{member} has been kicked from the server.", ephemeral=True)
         else:
             await interaction.followup.send("I do not have permission to kick members.", ephemeral=True)
@@ -657,7 +657,7 @@ async def local_ban(interaction: discord.Interaction, member: discord.Member, re
     try:
         if interaction.guild.me.guild_permissions.ban_members:
             await interaction.guild.ban(member, reason=f"Ban by {interaction.user}: {reason}")
-            await log_action(interaction.guild, f"{member} has been locally banned by {interaction.user} in {interaction.guild.name}. Reason: {reason}")
+            await log_action(interaction.guild, f"{member.mention} ({member.id}) has been locally banned by {interaction.user} in {interaction.guild.name}. Reason: {reason}")
             await interaction.followup.send(f"{member} has been banned from the server.", ephemeral=True)
         else:
             await interaction.followup.send("I do not have permission to ban members.", ephemeral=True)
