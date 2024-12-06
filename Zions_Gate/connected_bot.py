@@ -768,6 +768,7 @@ async def purge(interaction: discord.Interaction, channel: discord.TextChannel, 
 
     log_filename = f"purged_messages_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
 
+    # Create the log file
     with open(log_filename, mode="w", encoding="utf-8", newline='') as csvfile:
         csvwriter = csv.writer(csvfile)
         csvwriter.writerow(["Timestamp", "Author", "Author ID", "Content"])
@@ -779,23 +780,30 @@ async def purge(interaction: discord.Interaction, channel: discord.TextChannel, 
                 message.content.replace('\n', '\\n')
             ])
 
-    admin_channel_id = os.getenv("admin_channel_id")
-    if admin_channel_id:
+    # Send the log file to a webhook
+    webhook_url = os.getenv("logs_webhook_url")
+    if webhook_url:
         try:
-            admin_channel = interaction.guild.get_channel(int(admin_channel_id))
-            if admin_channel:
-                await admin_channel.send(
-                    content=f"Purged {len(deleted_messages)} messages from {channel.mention}. Log file attached:",
-                    file=discord.File(log_filename)
+            with open(log_filename, "rb") as log_file:
+                response = requests.post(
+                    webhook_url,
+                    data={
+                        "content": f"Purged {len(deleted_messages)} messages from {channel.mention}. Log file attached:"
+                    },
+                    files={"file": ("log.csv", log_file, "text/csv")}
                 )
-            else:
-                print("Admin channel not found. Log file was not sent.")
+                if response.status_code in [200, 204]:
+                    print("Log file successfully sent to the webhook.")
+                else:
+                    print(f"Failed to send log file to the webhook: {response.status_code} {response.text}")
         except Exception as e:
-            print(f"Error sending log file: {e}")
+            print(f"Error sending log file to the webhook: {e}")
     else:
-        print("Admin channel ID not set. Log file was not sent.")
+        print("Webhook URL not set. Log file was not sent.")
 
+    # Remove the log file
     os.remove(log_filename)
+
 
 
 
