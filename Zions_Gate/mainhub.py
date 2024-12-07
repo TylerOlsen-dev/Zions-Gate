@@ -230,9 +230,90 @@ async def on_member_join(member):
         except discord.Forbidden:
             print(f"Unable to send DM to {member.name} (ID: {member.id}).")
 
+        # Wait for 3 seconds before creating the onboarding channel
+        await asyncio.sleep(2)
+
+        # Create the onboarding channel for the member
+        onboarding_category_id = os.getenv("onboarding_category_id")
+        if onboarding_category_id:
+            category = guild.get_channel(int(onboarding_category_id))
+            if category and isinstance(category, discord.CategoryChannel):
+                # Create the channel in the specified category
+                channel_name = f"welcome-{member.name}".lower().replace(" ", "-").replace("#", "").replace("@", "")
+                onboarding_channel = await guild.create_text_channel(
+                    name=channel_name,
+                    category=category,
+                    reason=f"Onboarding channel for {member.name}",
+                    overwrites={
+                        guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                        member: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                    }
+                )
+                print(f"Created onboarding channel: {onboarding_channel.name} for {member.name}")
+
+                # Create and send the welcome embed
+                embed = discord.Embed(
+                    title="Welcome to the Zions Gate Hub Server!",
+                    description=(
+                        f"Hello, {member.mention}, and welcome to **Zions Gate**, your gateway to a network of inspiring "
+                        f"and faith-filled communities centered on **The Church of Jesus Christ of Latter-day Saints**.\n\n"
+                        "We are thrilled to have you here! This server is the first step into a larger, vibrant network where "
+                        "members and friends of the Church can explore gospel truths, build uplifting connections, and strengthen "
+                        "their testimony of Jesus Christ."
+                    ),
+                    color=0x1E90FF  # A calming blue color for the embed
+                )
+                embed.add_field(
+                    name="🌟 A Place of Connection and Growth:",
+                    value=(
+                        "Here at Zions Gate, you are stepping into a virtual gateway that connects you to an array of communities "
+                        "designed to inspire, uplift, and strengthen your testimony. You’ll find spaces where Saints gather to study "
+                        "the word of God, share their testimonies, and help one another walk the covenant path.\n\n"
+                        "This is a unique opportunity to grow in understanding, build friendships rooted in gospel principles, and "
+                        "feel the Savior’s love in every interaction. Whether you’re seeking spiritual guidance, scriptural insights, "
+                        "or just a moment of peace in a bustling world, you’ll find a community waiting for you."
+                    ),
+                    inline=False
+                )
+                embed.add_field(
+                    name="✨ A Spiritual Thought:",
+                    value=(
+                        "*\"And now, my beloved brethren, after ye have gotten into this straight and narrow path, I would ask if all is done? "
+                        "Behold, I say unto you, Nay; for ye have not come thus far save it were by the word of Christ with unshaken faith in him, "
+                        "relying wholly upon the merits of him who is mighty to save.\"*\n"
+                        "– **2 Nephi 31:19**\n\n"
+                        "Remember that as we press forward with faith, the Savior walks with us. This network is built to help us rely on Him more fully "
+                        "and discover joy in every step of our journey."
+                    ),
+                    inline=False
+                )
+                embed.add_field(
+                    name="💡 Why This Community Matters:",
+                    value=(
+                        "- **Fellowship**: Meet others who share your beliefs, values, and love for the gospel.\n"
+                        "- **Learning**: Find resources, discussions, and opportunities to deepen your understanding of the scriptures and doctrine.\n"
+                        "- **Service**: Participate in uplifting activities and events designed to strengthen individuals, families, and communities.\n"
+                        "- **Growth**: Join a network where every interaction is an opportunity to build your testimony and draw closer to Christ."
+                    ),
+                    inline=False
+                )
+                embed.set_footer(
+                    text="Welcome to Zions Gate! This is more than a server—it’s a gateway to Zion. 💙"
+                )
+                embed.set_image(
+                    url="https://drive.google.com/uc?id=1XQ6fLWOj79IXR4zlfzhbXWDw97MplrNJ"
+                )
+                await onboarding_channel.send(embed=embed)
+            else:
+                print("Onboarding category not found or invalid.")
+        else:
+            print("Onboarding category ID not set in environment variables.")
+
     except Exception as e:
         print(f"Error in on_member_join for {member.name} (ID: {member.id}): {e}")
         traceback.print_exc()
+
+
 
 
 
