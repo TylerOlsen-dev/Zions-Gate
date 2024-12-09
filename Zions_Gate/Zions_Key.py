@@ -1,6 +1,8 @@
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 import traceback
 import requests
 import discord
@@ -12,6 +14,7 @@ import aiohttp
 load_dotenv()
 
 from db_connection import db_connection
+mountain_time = datetime.now(ZoneInfo("America/Denver"))
 
 intents = discord.Intents.default()
 intents.members = True
@@ -332,7 +335,7 @@ async def global_ban(interaction: discord.Interaction, member: discord.Member, r
         VALUES (%s, %s, %s)
         ON DUPLICATE KEY UPDATE banned_at = VALUES(banned_at), reason = VALUES(reason)
         """
-        cursor.execute(sql_insert_ban, (user_id, datetime.utcnow(), reason))
+        cursor.execute(sql_insert_ban, (user_id, mountain_time, reason))
         conn.commit()
 
         sql_update_status = "UPDATE users SET verify_status = %s WHERE discord_id = %s"
