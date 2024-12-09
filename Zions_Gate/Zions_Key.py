@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import traceback
-import requests
 import discord
 import asyncio
 import csv
