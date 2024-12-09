@@ -23,7 +23,6 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 WEBHOOK_URL = os.getenv("logs_webhook_url")
 
-# New environment variable for verification check toggle
 CHECK_VERIFICATION_ON_STARTUP = os.getenv("check_verification_on_startup", "false").lower() == "true"
 
 async def log_action(guild, message):
