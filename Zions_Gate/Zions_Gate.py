@@ -20,7 +20,7 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-WEBHOOK_URL = os.getenv("logs_webhook_url")
+WEBHOOK_URL = os.getenv("logs_webhook_url") 
 
 async def log_action(guild, message):
     if not WEBHOOK_URL:
@@ -42,7 +42,7 @@ else:
         print("Invalid hub_guild_id.")
         hub_guild_id = None
 
-ONBOARDING_ROLE_ID = 1303111926217183293  # Started Onboarding
+ONBOARDING_ROLE_ID = 1303111926217183293
 WELCOME_CHANNEL_ID = 1312976611372695612
 VERIFICATION_CATEGORY_ID_STR = os.getenv("verification_category_id")
 ONBOARDING_CATEGORY_ID_STR = os.getenv("onboarding_category_id")
