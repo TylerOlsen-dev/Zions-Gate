@@ -18,27 +18,6 @@ CREATE SCHEMA IF NOT EXISTS `discord_verification` DEFAULT CHARACTER SET utf8mb4
 USE `discord_verification` ;
 
 -- -----------------------------------------------------
--- Table `discord_verification`.`button_configs`
--- -----------------------------------------------------
-CREATE TABLE IF NOT EXISTS `discord_verification`.`button_configs` (
-  `id` INT NOT NULL AUTO_INCREMENT,
-  `channel_id` BIGINT NOT NULL,
-  `role_id` BIGINT NOT NULL,
-  `message` TEXT NOT NULL,
-  `button_text` VARCHAR(255) NOT NULL,
-  `success_message` TEXT NOT NULL,
-  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-  `allowed_roles` TEXT NULL DEFAULT NULL,
-  `message_id` BIGINT NOT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE INDEX `message_id` (`message_id` ASC) VISIBLE)
-ENGINE = InnoDB
-AUTO_INCREMENT = 9
-DEFAULT CHARACTER SET = utf8mb4
-COLLATE = utf8mb4_0900_ai_ci;
-
-
--- -----------------------------------------------------
 -- Table `discord_verification`.`global_bans`
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `discord_verification`.`global_bans` (
@@ -52,13 +31,14 @@ COLLATE = utf8mb4_0900_ai_ci;
 
 
 -- -----------------------------------------------------
--- Table `discord_verification`.`ticket_buttons`
+-- Table `discord_verification`.`onboarding_sessions`
 -- -----------------------------------------------------
-CREATE TABLE IF NOT EXISTS `discord_verification`.`ticket_buttons` (
-  `message_id` BIGINT NOT NULL,
-  `channel_id` BIGINT NOT NULL,
-  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`message_id`))
+CREATE TABLE IF NOT EXISTS `discord_verification`.`onboarding_sessions` (
+  `user_id` BIGINT NOT NULL,
+  `onboarding_channel_id` BIGINT NULL DEFAULT NULL,
+  `current_page` INT NOT NULL DEFAULT '0',
+  `message_id` BIGINT NULL DEFAULT NULL,
+  PRIMARY KEY (`user_id`))
 ENGINE = InnoDB
 DEFAULT CHARACTER SET = utf8mb4
 COLLATE = utf8mb4_0900_ai_ci;
@@ -73,17 +53,24 @@ CREATE TABLE IF NOT EXISTS `discord_verification`.`users` (
   `username` VARCHAR(100) NOT NULL,
   `verify_status` TINYINT(1) NOT NULL DEFAULT '0',
   `time_created` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `global_bans_discord_id` BIGINT NOT NULL,
+  `global_bans_discord_id` BIGINT NULL,
+  `onboarding_sessions_user_id` BIGINT NULL,
   PRIMARY KEY (`id`),
   UNIQUE INDEX `discord_id` (`discord_id` ASC) VISIBLE,
   INDEX `fk_users_global_bans_idx` (`global_bans_discord_id` ASC) VISIBLE,
+  INDEX `fk_users_onboarding_sessions1_idx` (`onboarding_sessions_user_id` ASC) VISIBLE,
   CONSTRAINT `fk_users_global_bans`
     FOREIGN KEY (`global_bans_discord_id`)
     REFERENCES `discord_verification`.`global_bans` (`discord_id`)
     ON DELETE NO ACTION
+    ON UPDATE NO ACTION,
+  CONSTRAINT `fk_users_onboarding_sessions1`
+    FOREIGN KEY (`onboarding_sessions_user_id`)
+    REFERENCES `discord_verification`.`onboarding_sessions` (`user_id`)
+    ON DELETE NO ACTION
     ON UPDATE NO ACTION)
 ENGINE = InnoDB
-AUTO_INCREMENT = 33
+AUTO_INCREMENT = 74
 DEFAULT CHARACTER SET = utf8mb4
 COLLATE = utf8mb4_0900_ai_ci;
 
