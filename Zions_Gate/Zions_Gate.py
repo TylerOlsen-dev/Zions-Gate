@@ -9,7 +9,6 @@ import os
 import random
 
 load_dotenv()
-
 from db_connection import db_connection
 
 intents = discord.Intents.default()
@@ -20,32 +19,16 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-WEBHOOK_URL = os.getenv("logs_webhook_url") 
+WEBHOOK_URL = os.getenv("webhook_url")
+ZIONS_GATE_BOT_TOKEN = os.getenv("zions_gate_bot_token")
+ZIONS_GATE_GUILD_ID = int(os.getenv("zions_gate_guild_id", "0"))
+ZIONS_GATE_ONBOARDING_ROLE_ID = int(os.getenv("zions_gate_onboarding_role_id", "0"))
+ZIONS_GATE_WELCOME_CHANNEL_ID = int(os.getenv("zions_gate_welcome_channel_id", "0"))
+ZIONS_GATE_VERIFICATION_CATEGORY_ID_STR = os.getenv("zions_gate_verification_category_id")
+ZIONS_GATE_ONBOARDING_CATEGORY_ID_STR = os.getenv("zions_gate_onboarding_category_id")
+ZIONS_GATE_WELCOME_IMG_URL = os.getenv("zions_gate_welcome_img_url", "")
 
-async def log_action(guild, message):
-    if not WEBHOOK_URL:
-        return
-    data = {
-        "username": f"{guild.name} Bot",
-        "content": f"**[{guild.name}]** {message}"
-    }
-    requests.post(WEBHOOK_URL, json=data)
-
-hub_guild_id_str = os.getenv("hub_guild_id")
-if not hub_guild_id_str:
-    print("Error: 'hub_guild_id' not set.")
-    hub_guild_id = None
-else:
-    try:
-        hub_guild_id = int(hub_guild_id_str)
-    except ValueError:
-        print("Invalid hub_guild_id.")
-        hub_guild_id = None
-
-ONBOARDING_ROLE_ID = 1303111926217183293
-WELCOME_CHANNEL_ID = 1312976611372695612
-VERIFICATION_CATEGORY_ID_STR = os.getenv("verification_category_id")
-ONBOARDING_CATEGORY_ID_STR = os.getenv("onboarding_category_id")
+GLOBAL_VERIFIED_ROLE_NAME = os.getenv("global_verified_role_name", "global verified")
 
 QUESTIONS_POOL = [
     "What draws you to participate in a community centered around The Church of Jesus Christ of Latter-day Saints?",
@@ -66,11 +49,20 @@ QUESTIONS_POOL = [
     "What does it mean to you to uplift and support others in a group setting?",
     "How comfortable are you discussing faith-related topics with people from diverse backgrounds?",
     "What values do you think are important for a community centered on faith?",
-    "How do you see yourself participating in a hub with access to multiple communities of The Church of Jesus Christ of Latter-day Saints?",
+    "How do you see yourself participating in Zions Gate with access to multiple communities of The Church of Jesus Christ of Latter-day Saints?",
     "What would make this community a meaningful place for you to spend time?",
     "How do you balance sharing your beliefs with respecting others' perspectives?",
     "What is one way you could help foster kindness and understanding in this server?"
 ]
+
+async def log_action(guild, message):
+    if not WEBHOOK_URL:
+        return
+    data = {
+        "username": f"{guild.name} Bot",
+        "content": f"**[{guild.name}]** {message}"
+    }
+    requests.post(WEBHOOK_URL, json=data)
 
 async def save_onboarding_session(user_id, channel_id, message_id, current_page):
     conn = db_connection()
@@ -105,7 +97,7 @@ async def load_onboarding_sessions():
 
 def create_page1_embed(member):
     embed = discord.Embed(
-        title="Welcome to the Zions Gate Hub Server!",
+        title="Welcome to the Zions Gate Server!",
         description=(
             f"Hello, {member.mention}, and welcome to **Zions Gate**, your gateway to a network of inspiring "
             f"and faith-filled communities centered on **The Church of Jesus Christ of Latter-day Saints**.\n\n"
@@ -145,7 +137,8 @@ def create_page1_embed(member):
         inline=False
     )
     embed.set_footer(text="Welcome to Zions Gate! It’s a gateway to Zion. 💙")
-    embed.set_image(url="https://drive.google.com/uc?id=1XQ6fLWOj79IXR4zlfzhbXWDw97MplrNJ")
+    if ZIONS_GATE_WELCOME_IMG_URL:
+        embed.set_image(url=ZIONS_GATE_WELCOME_IMG_URL)
     return embed
 
 def create_rules_page2_embed():
@@ -171,17 +164,23 @@ def create_rules_page2_embed():
     for name, value in rules:
         embed.add_field(name=name, value=value, inline=False)
     embed.set_footer(text="Thank you for being part of our community!")
-    embed.set_thumbnail(url="https://example.com/thumbnail.png")
     return embed
 
 def create_verification_page3_embed():
     embed = discord.Embed(
         title="Verification Process",
-        description="Click **Get Verified** below to open a private verification channel.",
+        description=(
+            "Thank you for agreeing to the rules. Before you can access our servers, we need you to take one more step "
+            "by answering a few verification questions. These questions are not meant to challenge you, but to get a "
+            "sense of what you know. If you don’t know something, feel free to say so—you may be asked a few follow-up "
+            "questions. We appreciate your time and patience; we wouldn’t ask if it wasn’t necessary.\n\n"
+            "Click **Get Verified** below to open a private verification channel."
+        ),
         color=0x1E90FF
     )
     embed.set_footer(text="We appreciate your patience.")
     return embed
+
 
 class OnboardingView(discord.ui.View):
     def __init__(self, page1, page2, page3, member, guild, onboarding_channel):
@@ -198,10 +197,10 @@ class OnboardingView(discord.ui.View):
         if self.current_page == 0:
             self.add_item(NextButton(self.member, self.guild))
         elif self.current_page == 1:
-            self.add_item(BackButton())
-            self.add_item(AgreeButton())
+            self.add_item(BackButton(self.member))
+            self.add_item(AgreeButton(self.member))
         elif self.current_page == 2:
-            self.add_item(BackButton())
+            self.add_item(BackButton(self.member))
             self.add_item(GetVerifiedButton(self.member, self.guild, self.onboarding_channel))
 
     async def update_message(self, interaction: discord.Interaction):
@@ -214,19 +213,26 @@ class NextButton(discord.ui.Button):
         self.guild = guild
 
     async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.member.id:
+            await interaction.response.send_message("You cannot use these buttons.", ephemeral=True)
+            return
         view: OnboardingView = self.view
         view.current_page = 1
         view.update_buttons()
-        role = self.guild.get_role(ONBOARDING_ROLE_ID)
+        role = self.guild.get_role(ZIONS_GATE_ONBOARDING_ROLE_ID)
         if role and role not in self.member.roles:
             await self.member.add_roles(role)
         await view.update_message(interaction)
 
 class BackButton(discord.ui.Button):
-    def __init__(self):
+    def __init__(self, member):
         super().__init__(label="Back", style=discord.ButtonStyle.secondary)
+        self.member = member
 
     async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.member.id:
+            await interaction.response.send_message("You cannot use these buttons.", ephemeral=True)
+            return
         view: OnboardingView = self.view
         if view.current_page > 0:
             view.current_page -= 1
@@ -234,10 +240,14 @@ class BackButton(discord.ui.Button):
             await view.update_message(interaction)
 
 class AgreeButton(discord.ui.Button):
-    def __init__(self):
+    def __init__(self, member):
         super().__init__(label="Agree", style=discord.ButtonStyle.success)
+        self.member = member
 
     async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.member.id:
+            await interaction.response.send_message("You cannot use these buttons.", ephemeral=True)
+            return
         view: OnboardingView = self.view
         view.current_page = 2
         view.update_buttons()
@@ -251,6 +261,9 @@ class GetVerifiedButton(discord.ui.Button):
         self.onboarding_channel = onboarding_channel
 
     async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.member.id:
+            await interaction.response.send_message("You cannot use these buttons.", ephemeral=True)
+            return
         view: OnboardingView = self.view
         for item in view.children:
             if isinstance(item, GetVerifiedButton):
@@ -265,8 +278,8 @@ class GetVerifiedButton(discord.ui.Button):
             await interaction.followup.send("You already have a verification channel.", ephemeral=True)
             return
 
-        if VERIFICATION_CATEGORY_ID_STR:
-            category = self.guild.get_channel(int(VERIFICATION_CATEGORY_ID_STR))
+        if ZIONS_GATE_VERIFICATION_CATEGORY_ID_STR:
+            category = self.guild.get_channel(int(ZIONS_GATE_VERIFICATION_CATEGORY_ID_STR))
         else:
             category = discord.utils.get(self.guild.categories, name="Verification")
             if category is None:
@@ -298,14 +311,10 @@ class GetVerifiedButton(discord.ui.Button):
 
 async def restore_onboarding_views():
     sessions = await load_onboarding_sessions()
-    guild = bot.get_guild(hub_guild_id)
+    guild = bot.get_guild(ZIONS_GATE_GUILD_ID)
     if guild:
         for row in sessions:
             if len(row) == 3:
-                # Old schema without message_id
-                user_id, channel_id, current_page = row[0], row[1], row[2]
-                # Without message_id we can't fully restore the views
-                # If you must have message_id, ensure DB is updated and code changed
                 continue
             else:
                 user_id, channel_id, message_id, current_page = row
@@ -338,6 +347,7 @@ async def restore_onboarding_views():
 
 @bot.event
 async def on_ready():
+    # On Ready Event
     print(f'Logged in as {bot.user} (ID: {bot.user.id})')
     print('------')
     try:
@@ -353,8 +363,9 @@ async def on_ready():
 
 @bot.event
 async def on_member_join(member):
+    # On Member Join Event
     try:
-        if member.guild.id != hub_guild_id:
+        if member.guild.id != ZIONS_GATE_GUILD_ID:
             return
         if member.bot:
             return
@@ -373,11 +384,10 @@ async def on_member_join(member):
 
         if user_exists:
             if verified_status == 1:
-                # Returning verified user
-                verified_role = discord.utils.find(lambda r: r.name.lower() == 'verified', guild.roles)
-                if verified_role and verified_role not in member.roles:
-                    await member.add_roles(verified_role)
-                welcome_channel = guild.get_channel(WELCOME_CHANNEL_ID)
+                global_verified_role = discord.utils.find(lambda r: r.name.lower() == GLOBAL_VERIFIED_ROLE_NAME.lower(), guild.roles)
+                if global_verified_role and global_verified_role not in member.roles:
+                    await member.add_roles(global_verified_role)
+                welcome_channel = guild.get_channel(ZIONS_GATE_WELCOME_CHANNEL_ID)
                 if welcome_channel:
                     await welcome_channel.send(
                         f"Welcome back {member.mention} to Zions Gate! You've got full access as before!"
@@ -385,14 +395,13 @@ async def on_member_join(member):
                 await delete_onboarding_session(member.id)
                 return
             else:
-                # Returning unverified
                 page1 = create_page1_embed(member)
                 page1.description = f"**Welcome back {member.mention}!**\n" + (page1.description or "")
                 page2 = create_rules_page2_embed()
                 page3 = create_verification_page3_embed()
 
-                if ONBOARDING_CATEGORY_ID_STR:
-                    category = guild.get_channel(int(ONBOARDING_CATEGORY_ID_STR))
+                if ZIONS_GATE_ONBOARDING_CATEGORY_ID_STR:
+                    category = guild.get_channel(int(ZIONS_GATE_ONBOARDING_CATEGORY_ID_STR))
                     if category and isinstance(category, discord.CategoryChannel):
                         await asyncio.sleep(0.5)
                         channel_name = f"welcome-{member.name}".lower().replace(" ", "-").replace("#", "").replace("@", "")
@@ -413,7 +422,6 @@ async def on_member_join(member):
                 else:
                     print("Onboarding category ID not set.")
         else:
-            # New user
             conn = db_connection()
             cursor = conn.cursor()
             sql_insert_user = """
@@ -429,8 +437,8 @@ async def on_member_join(member):
             page2 = create_rules_page2_embed()
             page3 = create_verification_page3_embed()
 
-            if ONBOARDING_CATEGORY_ID_STR:
-                category = guild.get_channel(int(ONBOARDING_CATEGORY_ID_STR))
+            if ZIONS_GATE_ONBOARDING_CATEGORY_ID_STR:
+                category = guild.get_channel(int(ZIONS_GATE_ONBOARDING_CATEGORY_ID_STR))
                 if category and isinstance(category, discord.CategoryChannel):
                     await asyncio.sleep(0.5)
                     channel_name = f"welcome-{member.name}".lower().replace(" ", "-").replace("#", "").replace("@", "")
@@ -454,6 +462,7 @@ async def on_member_join(member):
         print(f"Error in on_member_join for {member.name} (ID: {member.id}): {e}")
         traceback.print_exc()
 
+# verify Command
 @bot.tree.command(name="verify", description="Verify a user.")
 @discord.app_commands.checks.has_permissions(administrator=True)
 async def verify(interaction: discord.Interaction, member: discord.Member):
@@ -467,13 +476,13 @@ async def verify(interaction: discord.Interaction, member: discord.Member):
 
         guild = interaction.guild
         if guild:
-            initial_role = guild.get_role(ONBOARDING_ROLE_ID)
+            initial_role = guild.get_role(ZIONS_GATE_ONBOARDING_ROLE_ID)
             if initial_role and initial_role in member.roles:
                 await member.remove_roles(initial_role)
 
-            verified_role = discord.utils.find(lambda r: r.name.lower().strip() == 'verified', guild.roles)
-            if verified_role and verified_role not in member.roles:
-                await member.add_roles(verified_role)
+            global_verified_role = discord.utils.find(lambda r: r.name.lower().strip() == GLOBAL_VERIFIED_ROLE_NAME.lower(), guild.roles)
+            if global_verified_role and global_verified_role not in member.roles:
+                await member.add_roles(global_verified_role)
 
             verification_channel_name = f"verify-{member.name.lower()}-{member.discriminator}"
             onboarding_channel_name = f"welcome-{member.name}".lower().replace(" ", "-").replace("#", "").replace("@", "")
@@ -493,7 +502,7 @@ async def verify(interaction: discord.Interaction, member: discord.Member):
                 except discord.Forbidden:
                     print(f"Could not DM {member}")
 
-                welcome_channel = guild.get_channel(WELCOME_CHANNEL_ID)
+                welcome_channel = guild.get_channel(ZIONS_GATE_WELCOME_CHANNEL_ID)
                 if welcome_channel:
                     await welcome_channel.send(
                         f"Welcome {member.mention} to Zions Gate! Please go check out our wonderful servers that we have to offer!"
@@ -515,7 +524,6 @@ async def verify(interaction: discord.Interaction, member: discord.Member):
                     pass
 
             await delete_onboarding_session(member.id)
-
         else:
             print("Guild not found.")
 
@@ -526,6 +534,7 @@ async def verify(interaction: discord.Interaction, member: discord.Member):
         cursor.close()
         conn.close()
 
+# verify_all Command
 @bot.tree.command(name="verify_all", description="Verify all users in the server.")
 @discord.app_commands.checks.has_permissions(administrator=True)
 async def verify_all(interaction: discord.Interaction):
@@ -538,11 +547,9 @@ async def verify_all(interaction: discord.Interaction):
             await interaction.followup.send("This command can only be used in a server.")
             return
 
-        verified_role = discord.utils.find(lambda r: r.name.lower().strip() == 'verified', guild.roles)
-        verification_pending_role = discord.utils.find(lambda r: r.name.lower().strip() == 'verification pending', guild.roles)
-
-        if not verified_role:
-            await interaction.followup.send("'Verified' role not found in the server.")
+        global_verified_role = discord.utils.find(lambda r: r.name.lower().strip() == GLOBAL_VERIFIED_ROLE_NAME.lower(), guild.roles)
+        if not global_verified_role:
+            await interaction.followup.send(f"'{GLOBAL_VERIFIED_ROLE_NAME}' role not found in the server.")
             return
 
         for member in guild.members:
@@ -564,11 +571,8 @@ async def verify_all(interaction: discord.Interaction):
                     cursor.execute(sql_update_status, (1, member.id))
                     conn.commit()
 
-                if verified_role not in member.roles:
-                    await member.add_roles(verified_role)
-
-                if verification_pending_role and verification_pending_role in member.roles:
-                    await member.remove_roles(verification_pending_role)
+                if global_verified_role not in member.roles:
+                    await member.add_roles(global_verified_role)
             except Exception as e:
                 print(f"Error verifying member {member}: {e}")
                 continue
@@ -583,13 +587,10 @@ async def verify_all(interaction: discord.Interaction):
         conn.close()
 
 async def close_verification_chat_after_delay(channel, delay=60):
-    print(f"close_verification_chat_after_delay: Waiting {delay} seconds before closing channel {channel.name} ({channel.id})")
     await asyncio.sleep(delay)
-    # Implement as needed
 
 @tasks.loop(hours=1)
 async def synchronize_verified_users():
-    await bot.wait_until_ready()
     conn = db_connection()
     cursor = conn.cursor()
     try:
@@ -597,23 +598,23 @@ async def synchronize_verified_users():
         cursor.execute(sql_fetch_verified)
         verified_users = cursor.fetchall()
 
-        hub_guild = bot.get_guild(hub_guild_id)
-        if not hub_guild:
-            print("Hub server not found.")
+        zions_gate_guild = bot.get_guild(ZIONS_GATE_GUILD_ID)
+        if not zions_gate_guild:
+            print("Zions Gate server not found.")
             return
 
-        verified_role = discord.utils.find(lambda r: r.name.lower().strip() == 'verified', hub_guild.roles)
-        if not verified_role:
-            print("Verified role not found.")
+        global_verified_role = discord.utils.find(lambda r: r.name.lower().strip() == GLOBAL_VERIFIED_ROLE_NAME.lower(), zions_gate_guild.roles)
+        if not global_verified_role:
+            print("Global verified role not found.")
             return
 
         for (user_id,) in verified_users:
-            member = hub_guild.get_member(user_id)
-            if member and verified_role not in member.roles:
+            member = zions_gate_guild.get_member(user_id)
+            if member and global_verified_role not in member.roles:
                 try:
-                    await member.add_roles(verified_role)
+                    await member.add_roles(global_verified_role)
                 except Exception as e:
-                    print(f"Error adding 'verified' role to {member}: {e}")
+                    print(f"Error adding 'global verified' role to {member}: {e}")
 
     except Exception as e:
         print(f"Error during synchronization: {e}")
@@ -622,4 +623,4 @@ async def synchronize_verified_users():
         cursor.close()
         conn.close()
 
-bot.run(os.getenv("hub_bot_token"))
+bot.run(ZIONS_GATE_BOT_TOKEN)
