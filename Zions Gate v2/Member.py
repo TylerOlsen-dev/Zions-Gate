@@ -310,6 +310,8 @@ async def setup(interaction: discord.Interaction, local1: discord.Role, global1:
 @bot.tree.command(name="globalban", description="Globally ban a user from all servers. Reason required; reply with evidence screenshots.")
 async def globalban(interaction: discord.Interaction, user: discord.User, reason: str):
     await interaction.response.defer(ephemeral=True)
+    # Ensure the user is in the database
+    await add_user_to_db(user)
     await set_global_ban(user.id, True)
     banned_in = []
     for guild in bot.guilds:
@@ -317,9 +319,8 @@ async def globalban(interaction: discord.Interaction, user: discord.User, reason
         if member is None:
             try:
                 # Use the provided user object directly
-                await add_user_to_db(user)
                 try:
-                    await guild.ban(discord.Object(id=user.id), reason=reason)
+                    await guild.ban(user, reason=reason)
                     banned_in.append(guild.name)
                 except Exception as e:
                     print(f"Failed to ban <@{user.id}> in {guild.name}: {e}")
