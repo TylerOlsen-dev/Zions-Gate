@@ -23,6 +23,17 @@ intents = discord.Intents.default()
 intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+def get_user_display(user) -> str:
+    try:
+        name = user.name
+    except AttributeError:
+        name = "Deleted User"
+    try:
+        disc = user.discriminator
+    except AttributeError:
+        disc = "0000"
+    return f"{name}#{disc}"
+
 # Server Registration
 async def register_server(guild: discord.Guild):
     try:
@@ -151,8 +162,29 @@ async def add_member_to_users(member: discord.Member):
     if member.bot:
         return
     user_id = member.id
-    user_name = f"{member.name}#{member.discriminator}"
+    user_name = get_user_display(member)
     account_age = member.created_at.strftime('%Y-%m-%d')
+    try:
+        connection = db_connection()
+        cursor = connection.cursor()
+        select_query = "SELECT User_ID FROM Users WHERE User_ID = %s"
+        cursor.execute(select_query, (user_id,))
+        result = cursor.fetchone()
+        if result is None:
+            insert_query = "INSERT INTO Users (User_ID, User_Name, Account_Age, Global_Banned) VALUES (%s, %s, %s, %s)"
+            data_tuple = (user_id, user_name, account_age, "False")
+            cursor.execute(insert_query, data_tuple)
+            connection.commit()
+            print(f"Added new user: {user_name} (ID: {user_id}) to Users table.")
+        cursor.close()
+        connection.close()
+    except Exception as e:
+        print("Database error:", e)
+
+async def add_user_to_db(user: discord.User):
+    user_id = user.id
+    user_name = get_user_display(user)
+    account_age = user.created_at.strftime('%Y-%m-%d')
     try:
         connection = db_connection()
         cursor = connection.cursor()
@@ -277,25 +309,50 @@ async def setup(interaction: discord.Interaction, local1: discord.Role, global1:
 # Slash Command: Global Ban
 @bot.tree.command(name="globalban", description="Globally ban a user from all servers. Reason required; reply with evidence screenshots.")
 async def globalban(interaction: discord.Interaction, user: discord.User, reason: str):
+    await interaction.response.defer(ephemeral=True)
     await set_global_ban(user.id, True)
     banned_in = []
     for guild in bot.guilds:
         member = guild.get_member(user.id)
-        if member:
+        if member is None:
+            try:
+                fetched_user = await bot.fetch_user(user.id)
+                await add_user_to_db(fetched_user)
+                try:
+                    await guild.ban(discord.Object(id=user.id), reason=reason)
+                    banned_in.append(guild.name)
+                except Exception as e:
+                    print(f"Failed to ban {fetched_user} in {guild.name}: {e}")
+            except Exception as e:
+                print(f"Error fetching user {user.id}: {e}")
+        else:
+            await add_member_to_users(member)
             try:
                 await guild.ban(member, reason=reason)
                 banned_in.append(guild.name)
             except Exception as e:
                 print(f"Failed to ban {user} in {guild.name}: {e}")
-    webhook_message = f"**Global Ban executed for {user} (ID: {user.id}).**\n**Reason:** {reason}\n\nPlease reply with screenshots of evidence supporting this ban."
-    async with aiohttp.ClientSession() as session:
-        webhook = discord.Webhook.from_url(BAN_WEBHOOK_URL, session=session)
-        await webhook.send(content=webhook_message)
-    await interaction.response.send_message(f"Globally banned {user.mention} from: {', '.join(banned_in)}. Database updated.", ephemeral=True)
+    loc = f"{interaction.guild.name} - {interaction.channel.mention}"
+    webhook_message = (
+        f"**Global Ban executed for <@{user.id}> (ID: {user.id}).**\n"
+        f"**Reason:** {reason}\n"
+        f"**Banned by:** <@{interaction.user.id}> (ID: {interaction.user.id})\n"
+        f"**Location:** {loc}\n"
+        f"**Servers affected:** {', '.join(banned_in)}\n\n"
+        "Please reply with screenshots of evidence supporting this ban."
+    )
+    try:
+        async with aiohttp.ClientSession() as session:
+            webhook = discord.Webhook.from_url(BAN_WEBHOOK_URL, session=session)
+            await webhook.send(content=webhook_message)
+    except Exception as e:
+        print("Error sending webhook message in global ban:", e)
+    await interaction.followup.send(f"Globally banned <@{user.id}> from: {', '.join(banned_in)}. Database updated.", ephemeral=True)
 
 # Slash Command: Global Unban
 @bot.tree.command(name="globalunban", description="Globally unban a user from all servers and remove the global ban flag.")
 async def globalunban(interaction: discord.Interaction, user: discord.User):
+    await interaction.response.defer(ephemeral=True)
     await set_global_ban(user.id, False)
     unbanned_in = []
     for guild in bot.guilds:
@@ -306,31 +363,58 @@ async def globalunban(interaction: discord.Interaction, user: discord.User):
             pass
         except Exception as e:
             print(f"Failed to unban {user} in {guild.name}: {e}")
-    webhook_message = f"**Global Unban executed for {user} (ID: {user.id}).**\n**Executed by:** {interaction.user} (ID: {interaction.user.id}).\n**Guilds affected:** {', '.join(unbanned_in) if unbanned_in else 'None'}."
-    async with aiohttp.ClientSession() as session:
-        webhook = discord.Webhook.from_url(BAN_WEBHOOK_URL, session=session)
-        await webhook.send(content=webhook_message)
-    await interaction.response.send_message(f"Global unban executed for {user.mention} from: {', '.join(unbanned_in)}. Database updated.", ephemeral=True)
+    loc = f"{interaction.guild.name} - {interaction.channel.mention}"
+    webhook_message = (
+        f"**Global Unban executed for <@{user.id}> (ID: {user.id}).**\n"
+        f"**Executed by:** <@{interaction.user.id}> (ID: {interaction.user.id})\n"
+        f"**Location:** {loc}\n"
+        f"**Guilds affected:** {', '.join(unbanned_in) if unbanned_in else 'None'}."
+    )
+    try:
+        async with aiohttp.ClientSession() as session:
+            webhook = discord.Webhook.from_url(BAN_WEBHOOK_URL, session=session)
+            await webhook.send(content=webhook_message)
+    except Exception as e:
+        print("Error sending webhook message in global unban:", e)
+    await interaction.followup.send(f"Global unban executed for <@{user.id}> from: {', '.join(unbanned_in)}. Database updated.", ephemeral=True)
 
 # Slash Command: Report User
 @bot.tree.command(name="reportuser", description="Report a user. Specify the user, reason, and location of the incident.")
 async def reportuser(interaction: discord.Interaction, user: discord.User, reason: str, location: str):
-    report_message = f"**User Report Received**\n\n**Reported User:** {user} (ID: {user.id})\n**Reported By:** {interaction.user} (ID: {interaction.user.id})\n**Location:** {location}\n**Reason:** {reason}"
+    report_message = (
+        f"**User Report Received**\n\n"
+        f"**Reported User:** <@{user.id}> (ID: {user.id})\n"
+        f"**Reported By:** <@{interaction.user.id}> (ID: {interaction.user.id})\n"
+        f"**Location:** {location}\n"
+        f"**Reason:** {reason}"
+    )
     async with aiohttp.ClientSession() as session:
         webhook = discord.Webhook.from_url(REPORT_WEBHOOK_URL, session=session)
         await webhook.send(content=report_message)
-    await interaction.response.send_message("Your report has been submitted. Moderators or administrators will review your report and may contact you for further details.", ephemeral=True)
+    if not interaction.response.is_done():
+        await interaction.response.send_message("Your report has been submitted. Moderators or administrators will review your report and may contact you for further details.", ephemeral=True)
+    else:
+        await interaction.followup.send("Your report has been submitted. Moderators or administrators will review your report and may contact you for further details.", ephemeral=True)
 
 # Slash Command: Local Kick
 @bot.tree.command(name="localkick", description="Kick a user from this server. Reason required; reply with evidence screenshots.")
 async def localkick(interaction: discord.Interaction, user: discord.Member, reason: str):
     try:
         await interaction.guild.kick(user, reason=reason)
-        webhook_message = f"**Local Kick executed for {user} (ID: {user.id}) in {interaction.guild.name}.**\n**Reason:** {reason}\n\nPlease reply with screenshots of evidence supporting this kick."
+        loc = f"{interaction.guild.name} - {interaction.channel.mention}"
+        webhook_message = (
+            f"**Local Kick executed for <@{user.id}> (ID: {user.id}) in {interaction.guild.name}.**\n"
+            f"**Reason:** {reason}\n"
+            f"**Location:** {loc}\n\n"
+            "Please reply with screenshots of evidence supporting this kick."
+        )
         async with aiohttp.ClientSession() as session:
             webhook = discord.Webhook.from_url(LK_WEBHOOK_URL, session=session)
             await webhook.send(content=webhook_message)
-        await interaction.response.send_message(f"Locally kicked {user.mention} from {interaction.guild.name}.", ephemeral=True)
+        if not interaction.response.is_done():
+            await interaction.response.send_message(f"Locally kicked <@{user.id}> from {interaction.guild.name}.", ephemeral=True)
+        else:
+            await interaction.followup.send(f"Locally kicked <@{user.id}> from {interaction.guild.name}.", ephemeral=True)
     except Exception as e:
         await interaction.response.send_message(f"Error kicking user: {e}", ephemeral=True)
 
@@ -339,11 +423,20 @@ async def localkick(interaction: discord.Interaction, user: discord.Member, reas
 async def localban(interaction: discord.Interaction, user: discord.Member, reason: str):
     try:
         await interaction.guild.ban(user, reason=reason)
-        webhook_message = f"**Local Ban executed for {user} (ID: {user.id}) in {interaction.guild.name}.**\n**Reason:** {reason}\n\nPlease reply with screenshots of evidence supporting this ban."
+        loc = f"{interaction.guild.name} - {interaction.channel.mention}"
+        webhook_message = (
+            f"**Local Ban executed for <@{user.id}> (ID: {user.id}) in {interaction.guild.name}.**\n"
+            f"**Reason:** {reason}\n"
+            f"**Location:** {loc}\n\n"
+            "Please reply with screenshots of evidence supporting this ban."
+        )
         async with aiohttp.ClientSession() as session:
             webhook = discord.Webhook.from_url(LB_WEBHOOK_URL, session=session)
             await webhook.send(content=webhook_message)
-        await interaction.response.send_message(f"Locally banned {user.mention} from {interaction.guild.name}.", ephemeral=True)
+        if not interaction.response.is_done():
+            await interaction.response.send_message(f"Locally banned <@{user.id}> from {interaction.guild.name}.", ephemeral=True)
+        else:
+            await interaction.followup.send(f"Locally banned <@{user.id}> from {interaction.guild.name}.", ephemeral=True)
     except Exception as e:
         await interaction.response.send_message(f"Error banning user: {e}", ephemeral=True)
 
@@ -389,13 +482,12 @@ async def purge(interaction: discord.Interaction, channel: discord.TextChannel, 
 async def on_user_update(before: discord.User, after: discord.User):
     if before.avatar != after.avatar:
         new_avatar_url = after.avatar.url if after.avatar else None
-        message = f"{after.name}#{after.discriminator} changed their profile picture."
+        message = f"<@{after.id}> changed their profile picture."
         embed = discord.Embed(description=message)
         if new_avatar_url:
             embed.set_image(url=new_avatar_url)
         async with aiohttp.ClientSession() as session:
-            avatar_webhook = discord.Webhook.from_url(AVATAR_WEBHOOK_URL, session=session)
-            await avatar_webhook.send(content=message, embed=embed)
+            await session.post(AVATAR_WEBHOOK_URL, json={"content": message, "embeds": [embed.to_dict()]})
 
 # On Ready
 @bot.event
