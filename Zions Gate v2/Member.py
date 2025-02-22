@@ -316,22 +316,22 @@ async def globalban(interaction: discord.Interaction, user: discord.User, reason
         member = guild.get_member(user.id)
         if member is None:
             try:
-                fetched_user = await bot.fetch_user(user.id)
-                await add_user_to_db(fetched_user)
+                # Use the provided user object directly
+                await add_user_to_db(user)
                 try:
                     await guild.ban(discord.Object(id=user.id), reason=reason)
                     banned_in.append(guild.name)
                 except Exception as e:
-                    print(f"Failed to ban {fetched_user} in {guild.name}: {e}")
+                    print(f"Failed to ban <@{user.id}> in {guild.name}: {e}")
             except Exception as e:
-                print(f"Error fetching user {user.id}: {e}")
+                print(f"Error processing user {user.id} in {guild.name}: {e}")
         else:
             await add_member_to_users(member)
             try:
                 await guild.ban(member, reason=reason)
                 banned_in.append(guild.name)
             except Exception as e:
-                print(f"Failed to ban {user} in {guild.name}: {e}")
+                print(f"Failed to ban <@{user.id}> in {guild.name}: {e}")
     loc = f"{interaction.guild.name} - {interaction.channel.mention}"
     webhook_message = (
         f"**Global Ban executed for <@{user.id}> (ID: {user.id}).**\n"
@@ -362,7 +362,7 @@ async def globalunban(interaction: discord.Interaction, user: discord.User):
         except discord.NotFound:
             pass
         except Exception as e:
-            print(f"Failed to unban {user} in {guild.name}: {e}")
+            print(f"Failed to unban <@{user.id}> in {guild.name}: {e}")
     loc = f"{interaction.guild.name} - {interaction.channel.mention}"
     webhook_message = (
         f"**Global Unban executed for <@{user.id}> (ID: {user.id}).**\n"
